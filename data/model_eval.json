@@ -1,0 +1,13 @@
+{
+  "baseline_mae": 7.267774782424844,
+  "model_mae": 7.269566818704544,
+  "r2": -0.1014226215676548,
+  "lift_pct": -0.02465728965671454,
+  "task": "high-pressure slot ranking",
+  "baseline_auc": 0.5905213005421049,
+  "model_auc": 0.6317267097706156,
+  "baseline_ap": 0.3469367969249045,
+  "model_ap": 0.3713333441170201,
+  "auc_lift_pct": 6.9778023571179695,
+  "high_threshold": 10.4
+}

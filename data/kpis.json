@@ -1,0 +1,11 @@
+{
+  "total_citations": 292768,
+  "n_cells": 6805,
+  "critical_zones": 412,
+  "high_zones": 93,
+  "max_capacity_loss_pct": 98.0,
+  "mean_capacity_loss_critical": 47.956067961165054,
+  "model_auc": 0.6317267097706156,
+  "baseline_auc": 0.5905213005421049,
+  "auc_lift_pct": 6.9778023571179695
+}

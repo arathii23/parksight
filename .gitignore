@@ -1,0 +1,19 @@
+# Python / env
+.venv/
+.ipython/
+__pycache__/
+*.pyc
+
+# OS noise
+.DS_Store
+**/.DS_Store
+.streamlit_run.log
+
+# Large data + model artifacts — regenerate via Flipgrid.ipynb (too big / not needed at runtime)
+rawdata.csv
+data/master_tickets.csv
+data/*.pkl
+
+# NOTE: the small app inputs in data/ ARE committed and are all the deployed app needs:
+# dashboard_cells.csv, dashboard_cell_time.csv, violation_summary.csv, vehicle_summary.csv,
+# junction_summary.csv, context_summary.csv, model_eval.json, kpis.json
