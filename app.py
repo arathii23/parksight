@@ -121,10 +121,11 @@ st.markdown(f"""<style>
 [data-testid="stMetricValue"] {{ font-size: 1.55rem; }}
 [data-testid="stMetricLabel"] {{ opacity: 0.85; }}
 section[data-testid="stSidebar"] {{ border-right: 1px solid rgba(255,255,255,0.06); }}
-.stTabs [data-baseweb="tab-list"] {{ gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); }}
-.stTabs [data-baseweb="tab"] {{ font-weight: 600; }}
+.stTabs [data-baseweb="tab-list"] {{ gap: 30px; border-bottom: 1px solid rgba(255,255,255,0.10); margin-bottom: 16px; }}
+.stTabs [data-baseweb="tab"] {{ font-weight: 600; font-size: 1.03rem; padding: 12px 2px; letter-spacing: 0.005em; }}
+.stTabs [data-baseweb="tab"]:hover {{ color: rgba(255,255,255,0.92); }}
 .stTabs [aria-selected="true"] {{ color: {ACCENT} !important; }}
-.stTabs [data-baseweb="tab-highlight"] {{ background-color: {ACCENT}; }}
+.stTabs [data-baseweb="tab-highlight"] {{ background-color: {ACCENT}; height: 3px; border-radius: 3px; }}
 [data-testid="stExpander"] details {{ border-radius: 10px; border-color: rgba(255,255,255,0.08); }}
 [data-testid="stVerticalBlockBorderWrapper"] {{ border-radius: 10px; }}
 hr {{ margin: 0.7rem 0; border-color: rgba(255,255,255,0.08); }}
