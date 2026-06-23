@@ -44,7 +44,8 @@ def load():
     opt = {}
     try: opt["model_eval.json"] = json.load(open(os.path.join(DATA_DIR,"model_eval.json")))
     except Exception: opt["model_eval.json"] = {}
-    for n in ("violation_summary.csv","vehicle_summary.csv","junction_summary.csv","context_summary.csv"):
+    for n in ("violation_summary.csv","vehicle_summary.csv","junction_summary.csv","context_summary.csv",
+              "hotspot_risk_forecast.csv"):
         try: opt[n] = pd.read_csv(os.path.join(DATA_DIR,n))
         except Exception: opt[n] = None
     return cells, ct, opt
@@ -64,6 +65,21 @@ cells["place"] = cells["location_name"].astype(str).str.split(",").str[:2].str.j
 cells["fill_color"] = cells["tier"].map(TIER_COLOR)
 cells["w_heat"] = np.sqrt(cells["total_impact"].clip(lower=0))
 ev = opt["model_eval.json"]
+
+# Next-week risk forecast (per Critical/High hotspot, from the trained gradient-boosted ranker)
+_fc = opt.get("hotspot_risk_forecast.csv")
+if _fc is not None and len(_fc):
+    cells = cells.merge(
+        _fc[['h3','risk_tier','fc_dow_name','fc_hour','fc_p','expected_hi_hours']],
+        on='h3', how='left')
+else:
+    for _c in ['risk_tier','fc_dow_name','fc_hour','fc_p','expected_hi_hours']:
+        cells[_c] = np.nan
+RISK_COLOR = {"High":"#e2483d","Medium":"#d68910","Low":"#56a37d"}
+n_high_risk   = int((cells["risk_tier"]=="High").sum())
+n_medium_risk = int((cells["risk_tier"]=="Medium").sum())
+n_low_risk    = int((cells["risk_tier"]=="Low").sum())
+have_forecast = (n_high_risk + n_medium_risk + n_low_risk) > 0
 
 # derived stats
 s = cells["total_impact"].sort_values(ascending=False).reset_index(drop=True)
@@ -162,6 +178,7 @@ with st.sidebar.expander("How to read this", expanded=False):
         "- **Critical / High** — statistically significant impact clusters (Getis-Ord Gi\\*).\n"
         "- **Impact** — vehicle footprint × violation severity × time-of-day demand.\n"
         "- **Capacity loss** — estimated % of carriageway a parked vehicle blocks, from OSM lane counts.\n"
+        "- **Next-week risk forecast** — ML ranker's predicted High/Medium/Low risk per hotspot for the upcoming week.\n"
         "- **Enforcement targets** — the deployable, time-stamped patrol schedule.")
 st.sidebar.divider()
 st.sidebar.caption("**Team Flipgrid.STAR** (IIT Kanpur)\n\n"
@@ -173,6 +190,10 @@ tab_o, tab_s, tab_t, tab_e, tab_m = st.tabs(
 with tab_o:
     _tot = int(cells.tickets.sum()); _ncrit = int((cells.tier=="CRITICAL").sum())
     _maxcap = cells["capacity_loss_pct"].max()
+    _forecast_sentence = (
+        f" The ML ranker flags <b>{n_high_risk} zones as High-risk for the upcoming week</b>, "
+        f"giving enforcement a forward-looking, prioritised target list."
+        if have_forecast else "")
     st.markdown(
         f"<div style='border-left:5px solid {ACCENT}; background:rgba(127,127,127,0.09); "
         f"padding:14px 18px; border-radius:8px; margin-bottom:10px;'>"
@@ -180,15 +201,17 @@ with tab_o:
         f"enforcement plan. Congestion impact is highly concentrated — the <b>top 5% of locations carry "
         f"{top5_share:.0f}%</b> of it — so just <b>{_ncrit} Critical zones</b> (statistically significant clusters) "
         f"cover most of the problem. A single blocked hotspot can remove up to "
-        f"<b>{_maxcap:.0f}% of a carriageway's capacity</b>; ParkSight pinpoints <b>where and when</b> to act.</div>",
+        f"<b>{_maxcap:.0f}% of a carriageway's capacity</b>; ParkSight pinpoints <b>where and when</b> to act."
+        f"{_forecast_sentence}</div>",
         unsafe_allow_html=True)
 
     st.markdown("##### How it works")
-    cstep = st.columns(3)
+    cstep = st.columns(4)
     steps = [
-        ("1  ·  Detect",    "Find statistically significant illegal-parking hotspots across the city (Getis-Ord Gi\\*)."),
-        ("2  ·  Quantify",  "Estimate the road capacity each hotspot removes, from real OpenStreetMap lane geometry."),
-        ("3  ·  Prioritise","Output a ranked, time-stamped patrol schedule — exactly where and when to act."),
+        ("1  ·  Detect",   "Find statistically significant illegal-parking hotspots across the city (Getis-Ord Gi\\*)."),
+        ("2  ·  Quantify", "Estimate the road capacity each hotspot removes, from real OpenStreetMap lane geometry."),
+        ("3  ·  Predict",  "Gradient-boosted ML ranker forecasts each hotspot's high-pressure windows for the upcoming week."),
+        ("4  ·  Act",      "Output a ranked, time-stamped patrol schedule — exactly where and when to deploy."),
     ]
     for col,(t,d) in zip(cstep, steps):
         with col.container(border=True):
@@ -202,10 +225,25 @@ with tab_o:
         jx = bool(r.get("near_junction", False))
         action = ("Station a patrol **" + window + "**"
                   + (" and keep the junction approach clear to stop spillback" if jx else " to clear the corridor") + ".")
+        # Forecast pill (next-week risk + predicted peak window from the ML ranker)
+        if pd.notna(r.get("risk_tier", np.nan)):
+            rcol = RISK_COLOR.get(r["risk_tier"], "#888")
+            fc_window = f"{r['fc_dow_name']} {int(r['fc_hour']):02d}:00"
+            forecast_html = (
+                f"<div style='margin-top:6px; font-size:0.9rem;'>"
+                f"<span style='background:{rcol}22; color:{rcol}; border:1px solid {rcol}55; "
+                f"padding:2px 8px; border-radius:10px; font-weight:600;'>Forecast: {r['risk_tier']}-risk next week</span>"
+                f"&nbsp;·&nbsp;predicted peak <b>{fc_window}</b> "
+                f"(p = {float(r['fc_p']):.0%})"
+                f"</div>")
+        else:
+            forecast_html = ""
         with st.container(border=True):
             st.markdown(f"**{i}. {r['place']}** — {str(r['top_violation']).title()}  ·  est. **{cap}**  ·  peak **{window}**")
             st.caption(f"↳ Recommended action: {action}")
-    st.caption("Full ranked list, live time-window targeting and CSV downloads are in the **Enforcement targets** tab.")
+            if forecast_html:
+                st.markdown(forecast_html, unsafe_allow_html=True)
+    st.caption("Full ranked list, next-week risk forecast and CSV downloads are in the **Enforcement targets** tab.")
 
     st.markdown("##### Why targeting works")
     lor = pd.DataFrame({"cum_cells_pct": np.arange(1,len(s)+1)/len(s)*100, "cum_impact_pct": cum_impact*100})
@@ -366,22 +404,54 @@ with tab_t:
 
 with tab_e:
     st.subheader("Recommended enforcement schedule")
-    st.caption("The prioritised, deployable output: the highest-impact zones with the recurring window when each is worst. "
+    st.caption("The prioritised, deployable output: the highest-impact zones with the recurring window when each is worst, "
+               "plus an ML **next-week risk forecast** per zone (the model's predicted high-pressure windows). "
                "Download it as a patrol worklist.")
+
+    if have_forecast:
+        rcol = st.columns(4)
+        rcol[0].metric("High-risk zones (next week)", n_high_risk,
+                       help="Predicted to have the most high-pressure (top-quartile-impact) windows in the coming week.")
+        rcol[1].metric("Medium-risk zones", n_medium_risk)
+        rcol[2].metric("Low-risk zones", n_low_risk)
+        rcol[3].metric("Model ROC-AUC vs naive", f"{ev.get('model_auc',0):.2f}",
+                       delta=f"+{ev.get('auc_lift_pct',0):.1f}% lift",
+                       help="The trained classifier beats a seasonal-naive ranker on a held-out future period.")
+
     sched = cells[cells.tier.isin(["CRITICAL","HIGH"])].sort_values("total_impact", ascending=False).head(30).reset_index(drop=True)
     sched["priority"] = sched.index + 1
     sched["recommended window"] = sched.apply(lambda r: f"{r.peak_dow} {int(r.peak_hour):02d}:00–{int(r.peak_hour)+1:02d}:00", axis=1)
+    if "fc_dow_name" in sched.columns:
+        def _fc_window(r):
+            if pd.isna(r.get("fc_dow_name")) or pd.isna(r.get("fc_hour")): return "—"
+            return f"{r['fc_dow_name']} {int(r['fc_hour']):02d}:00"
+        sched["predicted peak (next week)"] = sched.apply(_fc_window, axis=1)
+        sched["forecast risk"] = sched["risk_tier"].fillna("—")
+        sched["forecast p"] = sched["fc_p"]
+    else:
+        sched["predicted peak (next week)"] = "—"
+        sched["forecast risk"] = "—"
+        sched["forecast p"] = np.nan
     sched["map"] = sched.apply(lambda r: f"https://www.google.com/maps?q={r.lat:.5f},{r.lon:.5f}", axis=1)
-    sched_view = sched[["priority","place","tier","total_impact","capacity_loss_pct","road_class","top_violation","recommended window","map"]]
+    sched_view = sched[["priority","place","tier","forecast risk","forecast p","predicted peak (next week)",
+                        "total_impact","capacity_loss_pct","road_class","top_violation","recommended window","map"]]
     st.dataframe(sched_view, width='stretch', hide_index=True,
         column_config={"place": st.column_config.TextColumn("location"),
-                       "total_impact": st.column_config.NumberColumn("impact", format="%.0f"),
+                       "forecast risk": st.column_config.TextColumn("forecast (next wk)",
+                           help="Per-zone risk tier from the ML ranker: High / Medium / Low for the upcoming week."),
+                       "forecast p": st.column_config.NumberColumn("peak prob.", format="%.2f",
+                           help="Model probability that the predicted peak hour will be a high-pressure (top-quartile) event."),
+                       "predicted peak (next week)": st.column_config.TextColumn("predicted peak window"),
+                       "total_impact": st.column_config.NumberColumn("historical impact", format="%.0f"),
                        "capacity_loss_pct": st.column_config.NumberColumn("est. capacity loss", format="%.0f%%"),
                        "road_class": st.column_config.TextColumn("road class"),
                        "top_violation": st.column_config.TextColumn("dominant violation"),
                        "map": st.column_config.LinkColumn("map", display_text="view")})
     st.download_button("Download enforcement schedule (CSV)",
         sched_view.to_csv(index=False), "enforcement_schedule.csv", "text/csv")
+    st.caption("**How to read the forecast.** *Forecast (next wk)* is the ML ranker's per-zone risk tier for the "
+               "upcoming week; *peak prob.* is its predicted probability that the listed hour will be a top-quartile "
+               "congestion-impact event. See **Methodology → What the model predicts** for the full definition.")
 
     st.divider()
     st.subheader("Targets for a specific time window")
@@ -494,6 +564,19 @@ adjacency (a 2-ring, ~130 m neighbourhood) as the spatial weights, to obtain a z
 significant at **99% confidence** (z ≥ 2.58) are labelled **Critical** and those at **95%** (z ≥ 1.96) **High** —
 i.e. statistically significant *clusters* of high congestion-impact, not merely individually high-value cells.
 
+**What the model predicts.** A **slot-level high-pressure classifier**. The target is whether a given
+hotspot × day-of-week × hour-of-day combination will be a **top-quartile congestion-impact event** in that period.
+Concretely, the model outputs a probability `p_high ∈ [0,1]` for every (hotspot cell, dow, hour) slot, which we
+aggregate per hotspot into the **expected number of high-pressure hours next week** (`sum p_high` over the 168
+slots) and bin into **Low / Medium / High risk tiers** (terciles). The single slot with the highest `p_high` per
+hotspot is the **predicted peak window** shown in *Enforcement targets*.
+
+Inputs (9 features, no future leakage): the temporal block (`hour`, `dow`, `is_weekend`), the cell's own
+**seasonal climatology** (training-only mean impact at that slot and overall), and structural cell features
+(Getis-Ord Gi\\* z-score, OSM lane count, estimated % capacity loss, junction proximity). It is **not** a CCTV
+violation detector and **not** a raw occupancy estimator — it forecasts *enforcement-pressure risk per slot*,
+which is what patrol shift-planning needs.
+
 **Predictive validation.** All models use a **temporal** train/test split (fit on the earlier record, evaluate on a
 held-out later period) to avoid leakage. *(1) Regression —* forecasting a cell-hour's raw impact, a RandomForest does
 **not** beat the seasonal-naive weekly mean (lift {ev.get('lift_pct',0):+.1f}%); the recurring weekly mean carries
@@ -502,7 +585,8 @@ held-out later period) to avoid leakage. *(1) Regression —* forecasting a cell
 gradient-boosting classifier given the seasonal mean *plus* spatial structure (Gi\\* z-score) and road geometry
 (lane count, estimated capacity loss) raises ranking quality to **ROC-AUC {ev.get('model_auc',0):.3f}** against the
 naive ranker's **{ev.get('baseline_auc',0):.3f}** (**{ev.get('auc_lift_pct',0):+.1f}%**). Conclusion: the validated
-recurring pattern sets the *schedule*, while the learned model adds value for *prioritising within* it.
+recurring pattern sets the *schedule*, while the learned model adds value for *prioritising within* it — and is
+applied to every hotspot × slot for the next-week risk forecast.
 
 **Relationship to the problem statement.** The system delivers the three requested capabilities — hotspot
 detection, an impact quantification, and zone prioritisation — and converts reactive patrolling into a scheduled,
