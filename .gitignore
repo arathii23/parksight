@@ -12,6 +12,7 @@ __pycache__/
 # Build / submission artifacts (regenerate via make_deck.py)
 _render/
 parksight_source.zip
+parksight_extras.zip
 ParkSight_Pitch_Deck.pptx
 ParkSight_Pitch_Deck.pdf
 
