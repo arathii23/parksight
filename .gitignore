@@ -9,6 +9,12 @@ __pycache__/
 **/.DS_Store
 .streamlit_run.log
 
+# Build / submission artifacts (regenerate via make_deck.py)
+_render/
+parksight_source.zip
+ParkSight_Pitch_Deck.pptx
+ParkSight_Pitch_Deck.pdf
+
 # Large data + model artifacts — regenerate via Flipgrid.ipynb (too big / not needed at runtime)
 rawdata.csv
 data/master_tickets.csv

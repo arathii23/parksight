@@ -195,7 +195,8 @@ with st.sidebar.expander("How to read this", expanded=False):
         "Designed to drop into ASTraM's shift-planning flow.")
 st.sidebar.divider()
 st.sidebar.caption("**Team Flipgrid.STAR** (IIT Kanpur)\n\n"
-                   "Aaditya Rathi · Ankit Kumar · Priyanshi Agarwal · Shivesh Shukla")
+                   "Aaditya Rathi · Ankit Kumar · Priyanshi Agarwal · Shivesh Shukla\n\n"
+                   "Gridlock Hackathon 2.0 — Round 2 · by Flipkart")
 
 tab_o, tab_s, tab_t, tab_e, tab_m = st.tabs(
     ["Overview","Spatial distribution","Temporal demand","Enforcement targets","Methodology & validation"])
