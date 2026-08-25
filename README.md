@@ -2,6 +2,7 @@
 Detects illegal-parking hotspots and quantifies their congestion impact from Bengaluru traffic-police
 citation data, to enable proactive, targeted enforcement.
 
+Team - Aaditya Rathi, Priyanshi Agarwal, Shivesh Shukla and Ankit Kumar 
 ## Approach
 - Per-violation impact = vehicle footprint × violation severity × time-of-day demand
 - Aggregated on ~65 m Uber H3 hexagons (resolution 10)
