@@ -1,0 +1,75 @@
+name: Portfolio app availability backup
+
+on:
+  schedule:
+    - cron: '17 0,6,12,18 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: portfolio-app-availability
+  cancel-in-progress: false
+
+jobs:
+  check-apps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      # December 7, 2026 at 1:30 a.m. India Standard Time.
+      STOP_AT_UTC: '2026-12-06 20:00:00'
+    steps:
+      - name: Check whether the 30-day window is still open
+        id: window
+        run: |
+          if [[ $(date -u +%s) -ge $(date -u -d "$STOP_AT_UTC" +%s) ]]; then
+            echo 'The 30-day window has ended. Skipping browser visits.'
+          else
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Playwright
+        if: steps.window.outputs.active == 'true'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/portfolio-browser"
+          "$RUNNER_TEMP/portfolio-browser/bin/python" -m pip install playwright==1.64.1
+
+      - name: Visit and verify the three public apps
+        if: steps.window.outputs.active == 'true'
+        run: |
+          "$RUNNER_TEMP/portfolio-browser/bin/python" -u - <<'PY'
+          from playwright.sync_api import Error, sync_playwright
+
+          apps = (
+              ("https://doorboard-sap.streamlit.app/", "Kaveri General Hospital"),
+              ("https://parksight-flipgridstar.streamlit.app/", "ParkSight"),
+              ("https://asset-pricing-and-hedging-desk.streamlit.app/", "Asset Pricing and Hedging"),
+          )
+          frame = 'iframe[title="streamlitApp"]'
+          failed = []
+
+          with sync_playwright() as playwright:
+              browser = playwright.chromium.launch(channel="chrome")
+              for url, visible_text in apps:
+                  page = browser.new_page()
+                  try:
+                      page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+                      wake = page.get_by_role("button", name="Yes, get this app back up!", exact=True)
+                      wake.or_(page.locator(frame)).first.wait_for(state="visible", timeout=90_000)
+                      if wake.is_visible():
+                          wake.click(timeout=15_000)
+                          print(f"Requested wake-up: {url}")
+
+                      main = page.frame_locator(frame).get_by_role("main")
+                      main.get_by_text(visible_text, exact=True).first.wait_for(state="visible", timeout=240_000)
+                      print(f"Loaded: {url}")
+                  except Error as error:
+                      failed.append(url)
+                      print(f"Failed: {url}\n{error}")
+                  finally:
+                      page.close()
+              browser.close()
+
+          if failed:
+              raise SystemExit("App content failed to load: " + ", ".join(failed))
+          PY
